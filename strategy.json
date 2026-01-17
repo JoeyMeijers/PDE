@@ -18,19 +18,11 @@
       "output": "data.filtered"
     },
     {
-      "id": "add_random_score",
-      "language": "rust",
-      "image": "strategy-rust:latest",
-      "function": "add_random_score",
-      "input": "data.filtered",
-      "output": "data.scored"
-    },
-    {
       "id": "is_adult",
       "language": "rust",
       "image": "strategy-rust:latest",
       "function": "is_adult",
-      "input": "data.scored",
+      "input": "data.filtered",
       "output": "data.final"
     }
   ],
