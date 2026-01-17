@@ -4,32 +4,38 @@ import csv
 from io import StringIO
 
 
-def run_streaming(input_data):
+def run_streaming(batch_size=10000):
     """
-    Converts CSV data to JSONL format, streaming output directly.
-    Input: Raw CSV data as bytes/string
-    Output: JSONL data written directly to stdout
+    Reads CSV from stdin line by line and outputs JSONL in batches to stdout.
+    This avoids keeping the entire CSV in memory.
     """
-    try:
-        # Decode if bytes
-        if isinstance(input_data, bytes):
-            input_data = input_data.decode("utf-8")
+    import sys, csv, json
 
-        # Stream CSV and output JSONL line by line immediately
-        reader = csv.DictReader(StringIO(input_data))
+    reader = csv.DictReader(sys.stdin)
+    buffer = []
+    count = 0
 
-        for row in reader:
-            sys.stdout.write(json.dumps(row))
-            sys.stdout.write("\n")
+    for row in reader:
+        buffer.append(json.dumps(row))
+        count += 1
+        if count % batch_size == 0:
+            sys.stdout.write("\n".join(buffer) + "\n")
             sys.stdout.flush()
+            buffer = []
 
-    except Exception as e:
-        print(f"Error loading data: {e}", file=sys.stderr)
+    if buffer:
+        sys.stdout.write("\n".join(buffer) + "\n")
+        sys.stdout.flush()
+
+    print(
+        f"DEBUG: wrote {count} rows in batches of {batch_size}",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def main():
-    input_data = sys.stdin.read()
-    run_streaming(input_data)
+    run_streaming()
 
 
 if __name__ == "__main__":

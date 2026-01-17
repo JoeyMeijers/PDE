@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -25,8 +24,41 @@ func NewDockerExecutor() *DockerExecutor {
 	return &DockerExecutor{cli: cli}
 }
 
-// ExecuteWithCmd: voert een container uit met een specifiek commando
+// ExecuteWithCmd runs a container with input []byte and collects output in memory.
 func (d *DockerExecutor) ExecuteWithCmd(ctx context.Context, step Step, input []byte, cmd []string) ([]byte, error) {
+	reader := bytes.NewReader(input)
+	outReader, err := d.Stream(ctx, step, reader)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, outReader)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+// Execute implementeert het Executor interface voor generieke containers
+func (d *DockerExecutor) Execute(ctx context.Context, step Step, input []byte, cmd []string) ([]byte, error) {
+	if len(cmd) == 0 {
+		// fallback, gebruik step.Function als standaard commando
+		cmd = []string{fmt.Sprintf("/app/%s", step.Function)}
+	}
+	return d.ExecuteWithCmd(ctx, step, input, cmd)
+}
+
+// Stream runs a container and streams input/output safely.
+func (d *DockerExecutor) Stream(ctx context.Context, step Step, input io.Reader) (io.Reader, error) {
+	var cmd []string
+	if step.Language == "python" {
+		cmd = []string{"python", fmt.Sprintf("/app/funcs/%s.py", step.Function)}
+	} else {
+		cmd = []string{fmt.Sprintf("/app/%s", step.Function)}
+	}
+
 	resp, err := d.cli.ContainerCreate(ctx, &container.Config{
 		Image:     step.Image,
 		Cmd:       cmd,
@@ -37,7 +69,6 @@ func (d *DockerExecutor) ExecuteWithCmd(ctx context.Context, step Step, input []
 	if err != nil {
 		return nil, err
 	}
-	defer d.cli.ContainerRemove(context.Background(), resp.ID, types.ContainerRemoveOptions{Force: true})
 
 	attach, err := d.cli.ContainerAttach(ctx, resp.ID, types.ContainerAttachOptions{
 		Stream: true,
@@ -48,55 +79,31 @@ func (d *DockerExecutor) ExecuteWithCmd(ctx context.Context, step Step, input []
 	if err != nil {
 		return nil, err
 	}
-	defer attach.Close()
 
-	// Start container first
 	if err := d.cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
 		return nil, err
 	}
 
-	// Create a channel to signal when input is written
-	done := make(chan error, 1)
-
-	// Write input in goroutine and close stdin when done
+	// Stream input
 	go func() {
 		defer attach.CloseWrite()
-		_, err := io.Copy(attach.Conn, bytes.NewReader(input))
-		done <- err
+		io.Copy(attach.Conn, input)
 	}()
 
-	// Wait for input to be written
-	if err := <-done; err != nil {
-		return nil, err
-	}
-
-	ctx2, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
-	statusCh, errCh := d.cli.ContainerWait(ctx2, resp.ID, container.WaitConditionNotRunning)
-	select {
-	case err := <-errCh:
+	// Use pipe for stdout
+	stdoutPipe, stdoutWriter := io.Pipe()
+	go func() {
+		defer stdoutWriter.Close()
+		var stderrBuf bytes.Buffer
+		_, err := stdcopy.StdCopy(stdoutWriter, &stderrBuf, attach.Reader)
 		if err != nil {
-			d.cli.ContainerKill(context.Background(), resp.ID, "KILL")
-			return nil, err
+			fmt.Printf("docker stdcopy error: %v\n", err)
 		}
-	case <-statusCh:
-	case <-ctx2.Done():
-		d.cli.ContainerKill(context.Background(), resp.ID, "KILL")
-		return nil, fmt.Errorf("container execution timeout")
-	}
+		if stderrBuf.Len() > 0 {
+			fmt.Printf("docker container stderr: %s\n", stderrBuf.String())
+		}
+		d.cli.ContainerRemove(context.Background(), resp.ID, types.ContainerRemoveOptions{Force: true})
+	}()
 
-	var stdout, stderr bytes.Buffer
-	stdcopy.StdCopy(&stdout, &stderr, attach.Reader)
-
-	return stdout.Bytes(), nil
-}
-
-// Execute implementeert het Executor interface voor generieke containers
-func (d *DockerExecutor) Execute(ctx context.Context, step Step, input []byte, cmd []string) ([]byte, error) {
-	if len(cmd) == 0 {
-		// fallback, gebruik step.Function als standaard commando
-		cmd = []string{fmt.Sprintf("/app/%s", step.Function)}
-	}
-	return d.ExecuteWithCmd(ctx, step, input, cmd)
+	return stdoutPipe, nil
 }

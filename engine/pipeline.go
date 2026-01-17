@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"ise/logger"
@@ -11,46 +12,54 @@ import (
 func Run(ctx context.Context, s Strategy) error {
 	reg := NewRegistry()
 
-	// Read raw CSV file content
+	// Check source path
 	if s.Source.Path == "" {
 		logger.Error("no source path specified")
 		return fmt.Errorf("no source path specified")
 	}
 
-	csvContent, err := os.ReadFile(s.Source.Path)
+	// Open CSV file for streaming
+	srcFile, err := os.Open(s.Source.Path)
 	if err != nil {
-		logger.Error("failed to read CSV file: %v", err)
+		logger.Error("failed to open CSV file: %v", err)
 		return err
 	}
-	if len(csvContent) == 0 {
-		logger.Error("CSV file is empty")
-		return fmt.Errorf("CSV file is empty")
-	}
+	defer srcFile.Close()
 
-	// Store raw CSV content for pipeline to process
-	reg.Set("data.source", csvContent)
+	// Store source reader in registry
+	reg.SetReader("data.source", srcFile)
 
 	for i, step := range s.Pipeline {
 		logger.Info("step %d start: %s", i, step.ID)
 
-		input := reg.Get(step.Input)
+		inputReader := reg.GetReader(step.Input)
 
 		executor := NewExecutor(step)
-		out, err := executor.Execute(ctx, step, input, nil) // cmd=nil, executor bepaalt zelf
+		outReader, err := executor.Stream(ctx, step, inputReader) // Stream returns io.Reader
 		if err != nil {
 			logger.Error("step %s failed: %v", step.ID, err)
 			return err
 		}
-		reg.Set(step.Output, out)
-		logger.Debugf("output key=%s size=%d", step.Output, len(out))
+
+		reg.SetReader(step.Output, outReader)
 		logger.Info("step %d finished: %s", i, step.ID)
 	}
 
-	result := reg.Get(s.Sink.Input)
-	if err := os.WriteFile(s.Sink.Path, result, 0644); err != nil {
-		logger.Error("write sink failed: %v", err)
+	// Write final sink directly to file
+	outReader := reg.GetReader(s.Sink.Input)
+	sinkFile, err := os.Create(s.Sink.Path)
+	if err != nil {
+		logger.Error("failed to create sink file: %v", err)
 		return err
 	}
+	defer sinkFile.Close()
+
+	_, err = io.Copy(sinkFile, outReader)
+	if err != nil {
+		logger.Error("failed to write sink: %v", err)
+		return err
+	}
+
 	logger.Info("writing result to %s", s.Sink.Path)
 	return nil
 }
