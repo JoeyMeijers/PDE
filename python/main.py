@@ -1,8 +1,21 @@
 import sys
-import json
+import csv
+import io
 
-data = json.load(sys.stdin)
+# lees CSV van stdin
+input_csv = sys.stdin.read()
+reader = csv.DictReader(io.StringIO(input_csv), delimiter=";")
+rows = list(reader)
 
-data["cleaned"] = True
+# voeg kolom is_adult toe
+for row in rows:
+    row["is_adult"] = str(int(row["age"]) >= 18)
 
-json.dump(data, sys.stdout)
+# schrijf CSV naar stdout
+output = io.StringIO()
+fieldnames = reader.fieldnames + ["is_adult"]
+writer = csv.DictWriter(output, fieldnames=fieldnames, delimiter=";")
+writer.writeheader()
+writer.writerows(rows)
+
+print(output.getvalue(), end="")

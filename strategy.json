@@ -1,24 +1,20 @@
 {
   "source": {
     "type": "file",
-    "path": "input.json"
+    "path": "sources/persons.csv"
   },
   "pipeline": [
     {
-      "id": "clean",
+      "id": "add_is_adult",
       "executor": "docker",
       "image": "strategy-python:latest",
       "input": "source",
-      "output": "data.cleaned"
-    },
-    {
-      "type": "sleep",
-      "duration_ms": 2000
+      "output": "data.with_is_adult"
     }
   ],
   "sink": {
     "type": "file",
-    "path": "output.json",
-    "input": "data.cleaned"
+    "path": "output/persons_with_is_adult.csv",
+    "input": "data.with_is_adult"
   }
 }

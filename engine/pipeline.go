@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"ise/logger"
@@ -64,8 +65,13 @@ func Run(ctx context.Context, s strategy.Strategy) error {
 	result := reg.Get(s.Sink.Input)
 	if result == nil {
 		return fmt.Errorf("sink input key '%s' not found", s.Sink.Input)
-	}
 
+	} // maak directory aan indien nodig
+	dir := filepath.Dir(s.Sink.Path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("cannot create output dir: %w", err)
+	}
+	logger.Info("writing result to %s", s.Sink.Path)
 	if err := os.WriteFile(s.Sink.Path, result, 0644); err != nil {
 		return fmt.Errorf("write sink failed: %w", err)
 	}
