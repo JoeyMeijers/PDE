@@ -15,10 +15,18 @@
       "duration_ms": 1000
     },
     {
+      "id": "capitalize_names",
+      "language": "python",
+      "image": "strategy-python:latest",
+      "function": "capitalize_names",
+      "input": "data.with_is_adult",
+      "output": "data.names_capitalized"
+    },
+    {
       "id": "add_age_plus_one",
       "language": "rust",
       "image": "strategy-rust-add-age:latest",
-      "input": "data.with_is_adult",
+      "input": "data.names_capitalized",
       "output": "data.age_plus_one"
     }
   ],
