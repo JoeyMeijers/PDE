@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 
+	"ise/logger"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -17,14 +19,19 @@ type DockerExecutor struct {
 }
 
 func NewDockerExecutor() *DockerExecutor {
-	cli, _ := client.NewClientWithOpts(
+	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
 		client.WithAPIVersionNegotiation(),
 	)
+	if err != nil {
+		panic(err)
+	}
 	return &DockerExecutor{cli: cli}
 }
 
 func (d *DockerExecutor) Execute(ctx context.Context, image string, input []byte) ([]byte, error) {
+	logger.Info("docker execute image=%s", image)
+
 	resp, err := d.cli.ContainerCreate(ctx, &container.Config{
 		Image:     image,
 		OpenStdin: true,
@@ -32,8 +39,15 @@ func (d *DockerExecutor) Execute(ctx context.Context, image string, input []byte
 		Tty:       false,
 	}, nil, nil, nil, "")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("container create: %w", err)
 	}
+
+	// cleanup
+	defer func() {
+		_ = d.cli.ContainerRemove(context.Background(), resp.ID, types.ContainerRemoveOptions{
+			Force: true,
+		})
+	}()
 
 	attach, err := d.cli.ContainerAttach(ctx, resp.ID, types.ContainerAttachOptions{
 		Stream: true,
@@ -42,33 +56,46 @@ func (d *DockerExecutor) Execute(ctx context.Context, image string, input []byte
 		Stderr: true,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("container attach: %w", err)
 	}
+	defer attach.Close()
 
 	go func() {
 		defer attach.CloseWrite()
-		io.Copy(attach.Conn, bytes.NewReader(input))
+		_, _ = io.Copy(attach.Conn, bytes.NewReader(input))
 	}()
 
 	if err := d.cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("container start: %w", err)
 	}
 
-	// WACHT tot container klaar is
 	statusCh, errCh := d.cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
+
+	var exitCode int64
 	select {
 	case err := <-errCh:
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("container wait: %w", err)
 		}
-	case <-statusCh:
+	case status := <-statusCh:
+		exitCode = status.StatusCode
 	}
 
 	var stdout, stderr bytes.Buffer
-	stdcopy.StdCopy(&stdout, &stderr, attach.Reader)
+	_, _ = stdcopy.StdCopy(&stdout, &stderr, attach.Reader)
+
+	logger.Debugf("docker exit code=%d", exitCode)
 
 	if stderr.Len() > 0 {
-		return nil, fmt.Errorf("container error: %s", stderr.String())
+		logger.Debugf("docker stderr: %s", stderr.String())
+	}
+
+	if exitCode != 0 {
+		return nil, fmt.Errorf(
+			"container failed (exit=%d): %s",
+			exitCode,
+			stderr.String(),
+		)
 	}
 
 	return stdout.Bytes(), nil

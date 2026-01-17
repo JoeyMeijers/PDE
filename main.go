@@ -3,16 +3,36 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"os"
 
 	"ise/engine"
+	"ise/logger"
 	"ise/strategy"
 )
 
 func main() {
-	raw, _ := os.ReadFile("strategy.json")
-	var s strategy.Strategy
-	json.Unmarshal(raw, &s)
+	debug := flag.Bool("debug", false, "enable debug logging")
+	flag.Parse()
 
-	engine.Run(context.Background(), s)
+	logger.InitLogger(*debug)
+
+	raw, err := os.ReadFile("strategy.json")
+	if err != nil {
+		logger.Error("read strategy: %v", err)
+		os.Exit(1)
+	}
+
+	var s strategy.Strategy
+	if err := json.Unmarshal(raw, &s); err != nil {
+		logger.Error("parse strategy: %v", err)
+		os.Exit(1)
+	}
+
+	if err := engine.Run(context.Background(), s); err != nil {
+		logger.Error("run failed: %v", err)
+		os.Exit(1)
+	}
+
+	logger.Info("strategy finished successfully")
 }
