@@ -24,6 +24,14 @@
       "function": "is_adult",
       "input": "data.filtered",
       "output": "data.final"
+    },
+    {
+      "id": "export_data",
+      "language": "python",
+      "image": "strategy-python:latest",
+      "function": "export_data",
+      "input": "data.final",
+      "output": "data.exported"
     }
   ],
   "sink": {
