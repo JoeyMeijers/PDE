@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"os"
+	"time"
 
 	"ise/engine"
 	"ise/logger"
@@ -27,10 +28,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	start := time.Now()
 	if err := engine.Run(context.Background(), s); err != nil {
 		logger.Error("run failed: %v", err)
 		os.Exit(1)
 	}
-
-	logger.Info("strategy finished successfully")
+	elapsed := time.Since(start)
+	logger.Info("strategy finished successfully in %s", elapsed)
 }
