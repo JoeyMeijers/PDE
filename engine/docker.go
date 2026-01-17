@@ -29,11 +29,12 @@ func NewDockerExecutor() *DockerExecutor {
 	return &DockerExecutor{cli: cli}
 }
 
-func (d *DockerExecutor) Execute(ctx context.Context, image string, input []byte) ([]byte, error) {
-	logger.Info("docker execute image=%s", image)
+func (d *DockerExecutor) Execute(ctx context.Context, image, function string, input []byte) ([]byte, error) {
+	logger.Info("docker execute image=%s function=%s", image, function)
 
 	resp, err := d.cli.ContainerCreate(ctx, &container.Config{
 		Image:     image,
+		Cmd:       []string{"python", "main.py", function},
 		OpenStdin: true,
 		StdinOnce: true,
 		Tty:       false,
@@ -42,11 +43,8 @@ func (d *DockerExecutor) Execute(ctx context.Context, image string, input []byte
 		return nil, fmt.Errorf("container create: %w", err)
 	}
 
-	// cleanup
 	defer func() {
-		_ = d.cli.ContainerRemove(context.Background(), resp.ID, types.ContainerRemoveOptions{
-			Force: true,
-		})
+		_ = d.cli.ContainerRemove(context.Background(), resp.ID, types.ContainerRemoveOptions{Force: true})
 	}()
 
 	attach, err := d.cli.ContainerAttach(ctx, resp.ID, types.ContainerAttachOptions{
@@ -70,7 +68,6 @@ func (d *DockerExecutor) Execute(ctx context.Context, image string, input []byte
 	}
 
 	statusCh, errCh := d.cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
-
 	var exitCode int64
 	select {
 	case err := <-errCh:
@@ -85,17 +82,12 @@ func (d *DockerExecutor) Execute(ctx context.Context, image string, input []byte
 	_, _ = stdcopy.StdCopy(&stdout, &stderr, attach.Reader)
 
 	logger.Debugf("docker exit code=%d", exitCode)
-
 	if stderr.Len() > 0 {
 		logger.Debugf("docker stderr: %s", stderr.String())
 	}
 
 	if exitCode != 0 {
-		return nil, fmt.Errorf(
-			"container failed (exit=%d): %s",
-			exitCode,
-			stderr.String(),
-		)
+		return nil, fmt.Errorf("container failed (exit=%d): %s", exitCode, stderr.String())
 	}
 
 	return stdout.Bytes(), nil

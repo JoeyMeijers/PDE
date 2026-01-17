@@ -22,6 +22,7 @@ type PipelineStep struct {
 	Type       string `json:"type,omitempty"`
 	Executor   string `json:"executor,omitempty"`
 	Image      string `json:"image,omitempty"`
+	Function   string `json:"function,omitempty"` // nieuw
 	Input      string `json:"input,omitempty"`
 	Output     string `json:"output,omitempty"`
 	DurationMs int    `json:"duration_ms,omitempty"`

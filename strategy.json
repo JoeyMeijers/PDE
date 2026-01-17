@@ -8,13 +8,27 @@
       "id": "add_is_adult",
       "executor": "docker",
       "image": "strategy-python:latest",
+      "function": "add_is_adult",
       "input": "source",
       "output": "data.with_is_adult"
+    },
+    {
+      "id": "sleep_1",
+      "type": "sleep",
+      "duration_ms": 2000
+    },
+    {
+      "id": "filter_adults",
+      "executor": "docker",
+      "image": "strategy-python:latest",
+      "function": "filter_adults",
+      "input": "data.with_is_adult",
+      "output": "data.adults_only"
     }
   ],
   "sink": {
     "type": "file",
-    "path": "output/persons_with_is_adult.csv",
-    "input": "data.with_is_adult"
+    "path": "output/adults_only.csv",
+    "input": "data.adults_only"
   }
 }
