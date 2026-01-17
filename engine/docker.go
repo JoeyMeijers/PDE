@@ -23,16 +23,13 @@ func NewDockerExecutor() *DockerExecutor {
 
 func (d *DockerExecutor) Execute(ctx context.Context, step Step, input []byte) ([]byte, error) {
 	var cmd []string
-
 	switch step.Language {
 	case "python":
 		cmd = []string{"python", "main.py", step.Function}
 	case "rust":
-		cmd = []string{"./add_age_plus_one"} // executable in Dockerfile
-	case "node":
-		cmd = []string{"node", "funcs/capitalize_names.js"}
+		cmd = []string{"./add_age_plus_one"}
 	default:
-		cmd = []string{} // fallback
+		cmd = []string{}
 	}
 
 	resp, err := d.cli.ContainerCreate(ctx, &container.Config{

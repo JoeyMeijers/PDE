@@ -13,7 +13,6 @@ import (
 func main() {
 	debug := flag.Bool("debug", false, "enable debug logging")
 	flag.Parse()
-
 	logger.InitLogger(*debug)
 
 	raw, err := os.ReadFile("strategy.json")
