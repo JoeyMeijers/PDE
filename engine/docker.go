@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 
-	"ise/logger"
-
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -19,33 +17,34 @@ type DockerExecutor struct {
 }
 
 func NewDockerExecutor() *DockerExecutor {
-	cli, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
-	if err != nil {
-		panic(err)
-	}
+	cli, _ := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	return &DockerExecutor{cli: cli}
 }
 
-func (d *DockerExecutor) Execute(ctx context.Context, image, function string, input []byte) ([]byte, error) {
-	logger.Info("docker execute image=%s function=%s", image, function)
+func (d *DockerExecutor) Execute(ctx context.Context, step Step, input []byte) ([]byte, error) {
+	var cmd []string
+
+	switch step.Language {
+	case "python":
+		cmd = []string{"python", "main.py", step.Function}
+	case "rust":
+		cmd = []string{"./add_age_plus_one"} // executable in Dockerfile
+	case "node":
+		cmd = []string{"node", "funcs/capitalize_names.js"}
+	default:
+		cmd = []string{} // fallback
+	}
 
 	resp, err := d.cli.ContainerCreate(ctx, &container.Config{
-		Image:     image,
-		Cmd:       []string{"python", "main.py", function},
+		Image:     step.Image,
+		Cmd:       cmd,
 		OpenStdin: true,
 		StdinOnce: true,
 		Tty:       false,
 	}, nil, nil, nil, "")
 	if err != nil {
-		return nil, fmt.Errorf("container create: %w", err)
+		return nil, err
 	}
-
-	defer func() {
-		_ = d.cli.ContainerRemove(context.Background(), resp.ID, types.ContainerRemoveOptions{Force: true})
-	}()
 
 	attach, err := d.cli.ContainerAttach(ctx, resp.ID, types.ContainerAttachOptions{
 		Stream: true,
@@ -54,40 +53,32 @@ func (d *DockerExecutor) Execute(ctx context.Context, image, function string, in
 		Stderr: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("container attach: %w", err)
+		return nil, err
 	}
-	defer attach.Close()
 
 	go func() {
 		defer attach.CloseWrite()
-		_, _ = io.Copy(attach.Conn, bytes.NewReader(input))
+		io.Copy(attach.Conn, bytes.NewReader(input))
 	}()
 
 	if err := d.cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-		return nil, fmt.Errorf("container start: %w", err)
+		return nil, err
 	}
 
 	statusCh, errCh := d.cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
-	var exitCode int64
 	select {
 	case err := <-errCh:
 		if err != nil {
-			return nil, fmt.Errorf("container wait: %w", err)
+			return nil, err
 		}
-	case status := <-statusCh:
-		exitCode = status.StatusCode
+	case <-statusCh:
 	}
 
 	var stdout, stderr bytes.Buffer
-	_, _ = stdcopy.StdCopy(&stdout, &stderr, attach.Reader)
+	stdcopy.StdCopy(&stdout, &stderr, attach.Reader)
 
-	logger.Debugf("docker exit code=%d", exitCode)
 	if stderr.Len() > 0 {
-		logger.Debugf("docker stderr: %s", stderr.String())
-	}
-
-	if exitCode != 0 {
-		return nil, fmt.Errorf("container failed (exit=%d): %s", exitCode, stderr.String())
+		return nil, fmt.Errorf("container error: %s", stderr.String())
 	}
 
 	return stdout.Bytes(), nil

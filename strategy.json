@@ -1,12 +1,9 @@
 {
-  "source": {
-    "type": "file",
-    "path": "sources/persons.csv"
-  },
+  "source": { "path": "sources/persons.csv" },
   "pipeline": [
     {
       "id": "add_is_adult",
-      "executor": "docker",
+      "language": "python",
       "image": "strategy-python:latest",
       "function": "add_is_adult",
       "input": "source",
@@ -15,20 +12,18 @@
     {
       "id": "sleep_1",
       "type": "sleep",
-      "duration_ms": 2000
+      "duration_ms": 1000
     },
     {
-      "id": "filter_adults",
-      "executor": "docker",
-      "image": "strategy-python:latest",
-      "function": "filter_adults",
+      "id": "add_age_plus_one",
+      "language": "rust",
+      "image": "strategy-rust-add-age:latest",
       "input": "data.with_is_adult",
-      "output": "data.adults_only"
+      "output": "data.age_plus_one"
     }
   ],
   "sink": {
-    "type": "file",
-    "path": "output/adults_only.csv",
-    "input": "data.adults_only"
+    "path": "output/persons_processed.csv",
+    "input": "data.age_plus_one"
   }
 }

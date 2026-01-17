@@ -8,7 +8,6 @@ import (
 
 	"ise/engine"
 	"ise/logger"
-	"ise/strategy"
 )
 
 func main() {
@@ -23,7 +22,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var s strategy.Strategy
+	var s engine.Strategy
 	if err := json.Unmarshal(raw, &s); err != nil {
 		logger.Error("parse strategy: %v", err)
 		os.Exit(1)
