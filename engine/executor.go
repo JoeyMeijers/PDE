@@ -1,9 +1,13 @@
 package engine
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
+// Executor interface voor verschillende taal executors
 type Executor interface {
-	Execute(ctx context.Context, step Step, input []byte) ([]byte, error)
+	Execute(ctx context.Context, step Step, input []byte, cmd []string) ([]byte, error)
 }
 
 func NewExecutor(step Step) Executor {
@@ -15,4 +19,30 @@ func NewExecutor(step Step) Executor {
 	default:
 		return &DockerExecutor{}
 	}
+}
+
+// PythonExecutor runt Python scripts in een container
+// PythonExecutor runt Python scripts in een container via Docker
+type PythonExecutor struct {
+	docker *DockerExecutor
+}
+
+func (p *PythonExecutor) Execute(ctx context.Context, step Step, input []byte, cmd []string) ([]byte, error) {
+	// Als cmd leeg is, stel automatisch het Python commando in
+	if len(cmd) == 0 {
+		cmd = []string{"python", fmt.Sprintf("/app/funcs/%s.py", step.Function)}
+	}
+	return p.docker.Execute(ctx, step, input, cmd)
+}
+
+// RustExecutor runt Rust binaries in een container
+type RustExecutor struct {
+	docker *DockerExecutor
+}
+
+func (r *RustExecutor) Execute(ctx context.Context, step Step, input []byte, cmd []string) ([]byte, error) {
+	if len(cmd) == 0 {
+		cmd = []string{fmt.Sprintf("/app/%s", step.Function)}
+	}
+	return r.docker.Execute(ctx, step, input, cmd)
 }

@@ -4,34 +4,39 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"ise/logger"
 )
 
 func Run(ctx context.Context, s Strategy) error {
 	reg := NewRegistry()
-	docker := NewDockerExecutor()
 
-	// Source
-	data, err := os.ReadFile(s.Source.Path)
-	if err != nil {
-		return fmt.Errorf("read source failed: %w", err)
+	// Read raw CSV file content
+	if s.Source.Path == "" {
+		logger.Error("no source path specified")
+		return fmt.Errorf("no source path specified")
 	}
-	reg.Set("source", data)
-	logger.Info("loading source from %s", s.Source.Path)
+
+	csvContent, err := os.ReadFile(s.Source.Path)
+	if err != nil {
+		logger.Error("failed to read CSV file: %v", err)
+		return err
+	}
+	if len(csvContent) == 0 {
+		logger.Error("CSV file is empty")
+		return fmt.Errorf("CSV file is empty")
+	}
+
+	// Store raw CSV content for pipeline to process
+	reg.Set("data.source", csvContent)
 
 	for i, step := range s.Pipeline {
 		logger.Info("step %d start: %s", i, step.ID)
-		if step.Type == "sleep" {
-			logger.Info("sleeping %d ms", step.DurationMs)
-			time.Sleep(time.Millisecond * time.Duration(step.DurationMs))
-			logger.Info("step %d finished sleep", i)
-			continue
-		}
 
 		input := reg.Get(step.Input)
-		out, err := docker.Execute(ctx, step, input)
+
+		executor := NewExecutor(step)
+		out, err := executor.Execute(ctx, step, input, nil) // cmd=nil, executor bepaalt zelf
 		if err != nil {
 			logger.Error("step %s failed: %v", step.ID, err)
 			return err

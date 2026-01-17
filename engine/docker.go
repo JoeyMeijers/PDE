@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -17,21 +18,15 @@ type DockerExecutor struct {
 }
 
 func NewDockerExecutor() *DockerExecutor {
-	cli, _ := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, _ := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	)
 	return &DockerExecutor{cli: cli}
 }
 
-func (d *DockerExecutor) Execute(ctx context.Context, step Step, input []byte) ([]byte, error) {
-	var cmd []string
-	switch step.Language {
-	case "python":
-		cmd = []string{"python", "main.py", step.Function}
-	case "rust":
-		cmd = []string{"./add_age_plus_one"}
-	default:
-		cmd = []string{}
-	}
-
+// ExecuteWithCmd: voert een container uit met een specifiek commando
+func (d *DockerExecutor) ExecuteWithCmd(ctx context.Context, step Step, input []byte, cmd []string) ([]byte, error) {
 	resp, err := d.cli.ContainerCreate(ctx, &container.Config{
 		Image:     step.Image,
 		Cmd:       cmd,
@@ -42,6 +37,7 @@ func (d *DockerExecutor) Execute(ctx context.Context, step Step, input []byte) (
 	if err != nil {
 		return nil, err
 	}
+	defer d.cli.ContainerRemove(context.Background(), resp.ID, types.ContainerRemoveOptions{Force: true})
 
 	attach, err := d.cli.ContainerAttach(ctx, resp.ID, types.ContainerAttachOptions{
 		Stream: true,
@@ -52,31 +48,55 @@ func (d *DockerExecutor) Execute(ctx context.Context, step Step, input []byte) (
 	if err != nil {
 		return nil, err
 	}
+	defer attach.Close()
 
-	go func() {
-		defer attach.CloseWrite()
-		io.Copy(attach.Conn, bytes.NewReader(input))
-	}()
-
+	// Start container first
 	if err := d.cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
 		return nil, err
 	}
 
-	statusCh, errCh := d.cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
+	// Create a channel to signal when input is written
+	done := make(chan error, 1)
+
+	// Write input in goroutine and close stdin when done
+	go func() {
+		defer attach.CloseWrite()
+		_, err := io.Copy(attach.Conn, bytes.NewReader(input))
+		done <- err
+	}()
+
+	// Wait for input to be written
+	if err := <-done; err != nil {
+		return nil, err
+	}
+
+	ctx2, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	statusCh, errCh := d.cli.ContainerWait(ctx2, resp.ID, container.WaitConditionNotRunning)
 	select {
 	case err := <-errCh:
 		if err != nil {
+			d.cli.ContainerKill(context.Background(), resp.ID, "KILL")
 			return nil, err
 		}
 	case <-statusCh:
+	case <-ctx2.Done():
+		d.cli.ContainerKill(context.Background(), resp.ID, "KILL")
+		return nil, fmt.Errorf("container execution timeout")
 	}
 
 	var stdout, stderr bytes.Buffer
 	stdcopy.StdCopy(&stdout, &stderr, attach.Reader)
 
-	if stderr.Len() > 0 {
-		return nil, fmt.Errorf("container error: %s", stderr.String())
-	}
-
 	return stdout.Bytes(), nil
+}
+
+// Execute implementeert het Executor interface voor generieke containers
+func (d *DockerExecutor) Execute(ctx context.Context, step Step, input []byte, cmd []string) ([]byte, error) {
+	if len(cmd) == 0 {
+		// fallback, gebruik step.Function als standaard commando
+		cmd = []string{fmt.Sprintf("/app/%s", step.Function)}
+	}
+	return d.ExecuteWithCmd(ctx, step, input, cmd)
 }
