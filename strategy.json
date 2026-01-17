@@ -1,0 +1,24 @@
+{
+  "source": {
+    "type": "file",
+    "path": "input.json"
+  },
+  "pipeline": [
+    {
+      "id": "clean",
+      "executor": "docker",
+      "image": "strategy-python:latest",
+      "input": "source",
+      "output": "data.cleaned"
+    },
+    {
+      "type": "sleep",
+      "duration_ms": 2000
+    }
+  ],
+  "sink": {
+    "type": "file",
+    "path": "output.json",
+    "input": "data.cleaned"
+  }
+}
