@@ -13,3 +13,7 @@ serde_json = "1.0"
 [[bin]]
 name = "add_random_score"
 path = "src/bin/add_random_score.rs"
+
+[[bin]]
+name = "is_adult"
+path = "src/bin/is_adult.rs"

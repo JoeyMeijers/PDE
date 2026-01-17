@@ -24,10 +24,18 @@
       "function": "add_random_score",
       "input": "data.filtered",
       "output": "data.scored"
+    },
+    {
+      "id": "is_adult",
+      "language": "rust",
+      "image": "strategy-rust:latest",
+      "function": "is_adult",
+      "input": "data.scored",
+      "output": "data.final"
     }
   ],
   "sink": {
     "path": "output/debug.json",
-    "input": "data.scored"
+    "input": "data.final"
   }
 }
