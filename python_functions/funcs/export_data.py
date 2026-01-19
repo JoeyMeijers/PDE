@@ -4,7 +4,7 @@ import json
 import csv
 
 
-def transform(records):
+def transform(records: list[str]) -> list[str]:
     """
     Optional transformations before export.
     By default, returns the records unchanged.

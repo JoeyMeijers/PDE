@@ -35,7 +35,7 @@
     }
   ],
   "sink": {
-    "path": "output/debug.json",
+    "path": "output/result.json",
     "input": "data.final"
   }
 }

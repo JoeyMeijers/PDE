@@ -7,6 +7,15 @@ PYTHON_IMAGE := strategy-python:latest
 RUST_IMAGE   := strategy-rust-add-age:latest
 
 # -------------------------------
+# Algemene Docker build regels
+# Build go project
+build-go:
+	@echo "🔹 Building Go project..."
+	@go build -o ise_pipeline . \
+	|| { echo "❌ Go build failed"; exit 1; }
+
+
+# -------------------------------
 # Python Docker image
 # -------------------------------
 docker-python:
