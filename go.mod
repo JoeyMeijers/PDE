@@ -1,4 +1,4 @@
-module ise
+module pde
 
 go 1.25.5
 

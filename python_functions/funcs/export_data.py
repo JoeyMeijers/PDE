@@ -73,7 +73,7 @@ def run_streaming() -> None:
     except Exception as e:
         if csv_file and not csv_file.closed:
             csv_file.close()
-        raise e
+        rapde e
 
 
 def main():

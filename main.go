@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"ise/engine"
-	"ise/logger"
+	"pde/engine"
+	"pde/logger"
 )
 
 func main() {

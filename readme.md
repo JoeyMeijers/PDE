@@ -1,4 +1,4 @@
-# ISE — Polyglot Data Pipeline Engine
+# PDE — Polyglot Data Pipeline Engine
 
 A language-agnostic, container-based data pipeline engine that executes structured data transformations via a flexible pipeline of functions, regardless of whether they're written in Python, Rust, or other languages.
 
@@ -23,7 +23,7 @@ A language-agnostic, container-based data pipeline engine that executes structur
 
 ### 1. Architecture Overview
 
-ISE consists of three main components:
+pde consists of three main components:
 
 1. **Go Engine** (`engine/`) — Orchestrates the pipeline execution, manages I/O streaming
 2. **Strategy Definition** (`strategy.json`) — Declares the pipeline steps, their inputs/outputs, and Docker images
@@ -289,7 +289,7 @@ Results are written to the path specified in `strategy.json`'s `sink.path`. By d
 
 ### Memory Usage
 
-ISE is designed for **streaming large datasets**:
+pde is designed for **streaming large datasets**:
 - Data flows line-by-line through pipes, not in memory
 - Each step processes incrementally
 - No entire dataset is ever loaded into RAM

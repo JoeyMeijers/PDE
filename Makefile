@@ -1,5 +1,5 @@
 # ===============================
-# Makefile voor ISE Docker builds
+# Makefile voor pde Docker builds
 # ===============================
 
 # Variabelen
@@ -11,7 +11,7 @@ RUST_IMAGE   := strategy-rust-add-age:latest
 # Build go project
 build-go:
 	@echo "🔹 Building Go project..."
-	@go build -o ise_pipeline . \
+	@go build -o pde_pipeline . \
 	|| { echo "❌ Go build failed"; exit 1; }
 
 
